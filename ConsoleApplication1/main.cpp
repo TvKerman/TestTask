@@ -188,10 +188,7 @@ int main()
                     throw std::exception();
                 }
             }
-            else 
-            {
-                tmp.push_back(word);
-            }
+            tmp.push_back(word);
         }
         if (!tempFile.is_open() && tmp.size() > 0)
         {
