@@ -4,8 +4,14 @@
 #include <vector>
 #include <queue>
 #include <cstdio>
+#include <windows.h>
+#include <psapi.h>
 
-#define MAX_VECTOR_BUFFER_SIZE 100000
+#define MAX_VECTOR_BUFFER_SIZE 1000000
+#define MAX_PERCENTAGE_OF_FREE_RAM_USAGE 1.0
+#define WIDTH 7
+#define DIV 1024
+
 
 void generate_file(int countRows, int lenWord) 
 {
@@ -41,6 +47,39 @@ void merge(const std::vector<std::string>& source1,
         }
         writeIndex++;
     }
+}
+
+void printMemorySize() 
+{
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(MEMORYSTATUSEX);
+
+    GlobalMemoryStatusEx(&statex);
+
+    PROCESS_MEMORY_COUNTERS_EX pmc;
+    GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
+    SIZE_T virtualMemUsedByMe = pmc.PrivateUsage;
+    
+    std::cout << "Procces memory: " << virtualMemUsedByMe / DIV / DIV << " Mb\n";
+    std::cout << "Memory load: " << statex.dwMemoryLoad << "\n";
+    std::cout << "Total phys memory: " << statex.ullTotalPhys / DIV / DIV << " Mb\n";
+    std::cout << "The physical memory currently available: " << statex.ullAvailPhys / DIV / DIV << " Mb\n";
+}
+
+bool isCanAddWord(std::vector<std::string> &wordsBuffer) 
+{
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(MEMORYSTATUSEX);
+
+    GlobalMemoryStatusEx(&statex);
+
+    PROCESS_MEMORY_COUNTERS_EX pmc;
+    GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
+    size_t virtualMemUsedByMe = pmc.PrivateUsage;
+
+    float percentage = (float)virtualMemUsedByMe / statex.ullTotalPhys * 100;
+    //std::cout << percentage << '\n';
+    return wordsBuffer.size() < MAX_VECTOR_BUFFER_SIZE && percentage < MAX_PERCENTAGE_OF_FREE_RAM_USAGE;
 }
 
 void mergeSort_(std::vector<std::string> &vector, 
@@ -102,6 +141,21 @@ void writeFile(const std::vector<std::string>& vector, std::ofstream& file)
     }
 }
 
+void openNewTempFile(std::ofstream &tempFile, size_t &indexFile,std::queue<std::string> &queueTempFiles) 
+{
+    std::string fileName = "tmp" + std::to_string(indexFile) + ".txt";
+    tempFile.open(fileName, 'w');
+    if (tempFile.is_open())
+    {
+        queueTempFiles.push(fileName);
+        indexFile++;
+    }
+    else
+    {
+        throw std::exception();
+    }
+}
+
 int main()
 {
     std::ifstream inputFile("input.txt");
@@ -114,52 +168,40 @@ int main()
     if (inputFile.is_open() && outFile.is_open()) 
     {
         std::string word;
-        std::ofstream tmpFile;
+        std::ofstream tempFile;
         while (std::getline(inputFile, word)) 
         {
-            if (!tmpFile.is_open())
+            if (!isCanAddWord(tmp) ) 
             {
-                std::string fileName = "tmp" + std::to_string(indexFile) + ".txt";
-                tmpFile.open(fileName, 'w');
-                if (tmpFile.is_open())
+                openNewTempFile(tempFile, indexFile, namesTmpFiles);
+                if (tempFile.is_open()) 
                 {
-                    namesTmpFiles.push(fileName);
-                    indexFile++;
+                    mergeSort(tmp);
+                    writeFile(tmp, tempFile);
+                    printMemorySize();
+                    tempFile.close();
+                    tmp.clear();
                 }
-                else
+                else 
                 {
+                    std::cerr << "Not open temp file!!!";
                     throw std::exception();
                 }
             }
-
-            if (tmp.size() == MAX_VECTOR_BUFFER_SIZE && tmpFile.is_open()) 
+            else 
             {
-                mergeSort(tmp);
-                writeFile(tmp, tmpFile);
-                tmpFile.close();
-                tmp.clear();
-            } 
-            tmp.push_back(word);
+                tmp.push_back(word);
+            }
         }
-        if (!tmpFile.is_open() && tmp.size() > 0)
+        if (!tempFile.is_open() && tmp.size() > 0)
         {
-            std::string fileName = "tmp" + std::to_string(indexFile) + ".txt";
-            tmpFile.open(fileName, 'w');
-            if (tmpFile.is_open())
-            {
-                namesTmpFiles.push(fileName);
-                indexFile++;
-            }
-            else
-            {
-                throw std::exception();
-            }
+            openNewTempFile(tempFile, indexFile, namesTmpFiles);
         }
-        if (tmp.size() > 0 && tmpFile.is_open())
+        if (tmp.size() > 0 && tempFile.is_open())
         {
             mergeSort(tmp);
-            writeFile(tmp, tmpFile);
-            tmpFile.close();
+            writeFile(tmp, tempFile);
+            tempFile.close();
             tmp.clear();
         }
 
@@ -210,10 +252,8 @@ int main()
     }
     else 
     {
-        generate_file(1000000, 200);
+        generate_file(10000, 2000);
     }
 
-    
     return 0;
 }
-
