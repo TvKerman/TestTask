@@ -6,12 +6,14 @@
 #include <cstdio>
 #include <windows.h>
 #include <psapi.h>
+#include <chrono>
+#include <thread>
 
 #define MAX_VECTOR_BUFFER_SIZE 1000000
 #define MAX_PERCENTAGE_OF_FREE_RAM_USAGE 1.0
+#define MAX_NON_PARALLEL_VECTOR_SIZE 1000
 #define WIDTH 7
 #define DIV 1024
-
 
 void generate_file(int countRows, int lenWord) 
 {
@@ -30,11 +32,12 @@ void merge(const std::vector<std::string>& source1,
            const size_t startIndex1, const size_t endIndex1,
            const std::vector<std::string>& source2,
            const size_t startIndex2, const size_t endIndex2,
-           std::vector<std::string> &destination) 
+           std::vector<std::string> &destination,
+           const size_t startWrite) 
 {
     size_t readIndex1 = startIndex1;
     size_t readIndex2 = startIndex2;
-    size_t writeIndex = 0;
+    size_t writeIndex = startWrite;
     while (readIndex1 < endIndex1 || readIndex2 < endIndex2) {
         if (readIndex2 == endIndex2 || readIndex1 < endIndex1 && 
                     source1[readIndex1] < source2[readIndex2]) {
@@ -46,6 +49,29 @@ void merge(const std::vector<std::string>& source1,
             readIndex2++;
         }
         writeIndex++;
+    }
+}
+
+void merge(const std::vector<std::string>::iterator &begin1,
+           const std::vector<std::string>::iterator &end1,
+           const std::vector<std::string>::iterator &begin2,
+           const std::vector<std::string>::iterator &end2,
+           const std::vector<std::string>::iterator &destination) 
+{
+    std::vector<std::string>::iterator read1 = begin1;
+    std::vector<std::string>::iterator read2 = begin2;
+    std::vector<std::string>::iterator write = destination;
+    while (read1 < end1 || read2 < end2) {
+        if (read2 == end2 || read1 < end1 && 
+                    read1 < read2) {
+            (*write) = (*read1);
+            read1++;
+        }
+        else {
+            (*write) = (*read2);
+            read2++;
+        }
+        write++;
     }
 }
 
@@ -82,27 +108,38 @@ bool isCanAddWord(std::vector<std::string> &wordsBuffer)
     return wordsBuffer.size() < MAX_VECTOR_BUFFER_SIZE && percentage < MAX_PERCENTAGE_OF_FREE_RAM_USAGE;
 }
 
+bool isOrdered(std::vector<std::string> &vector) 
+{
+    for (size_t i = 1; i < vector.size(); i++) 
+    {
+        if (vector[i - 1] > vector[i]) 
+        {
+            return false;
+        }
+    }
+    return true;
+} 
+
 void mergeSort_(std::vector<std::string> &vector, 
-                                size_t leftBorder, 
-                                size_t rightBorder, 
+                const size_t start, const size_t end,
                 std::vector<std::string> &buffer) 
 {
-    size_t size = rightBorder - leftBorder;
+    size_t size = end - start;
     if (size <= 1)
         return;
     
     // Определение середины последовательности
-    size_t middle = (leftBorder + rightBorder) / 2;
+    size_t middle = (start + end) / 2;
 
     // Рекурсивные вызовы функций сортировки для каждой половины
-    mergeSort_(vector, leftBorder, middle, buffer);
-    mergeSort_(vector, middle, rightBorder, buffer);
+    mergeSort_(vector, start, middle, buffer);
+    mergeSort_(vector, middle, end, buffer);
     
     // Слияние элементов, результат сохраняется в буфер
-    merge(vector, leftBorder, middle, vector, middle, rightBorder, buffer);
+    merge(vector, start, middle, vector, middle, end, buffer, start);
     
     // Копирование результата в исходный вектор
-    std::copy(buffer.begin(), buffer.begin() + size, vector.begin() + leftBorder);
+    std::copy(buffer.begin() + start, buffer.begin() + end, vector.begin() + start);
 }
 
 
@@ -110,7 +147,45 @@ void mergeSort(std::vector<std::string> &vector)
 {
     // Создание буфера
     std::vector<std::string> buffer = vector;
-    mergeSort_(vector, 0, vector.size(), buffer);
+    auto timeStart = std::chrono::steady_clock::now();
+    size_t countThreads = (std::thread::hardware_concurrency() >= 4 ? 4: 0);
+    if (countThreads == 0 || vector.size() < MAX_NON_PARALLEL_VECTOR_SIZE) 
+    {
+        std::cout << "Sorting is not parallel\n";
+        mergeSort_(vector, 0, vector.size(), buffer);
+    }
+    else
+    {
+        std::cout << "Sorting is parallel\n";
+        std::cout << "Count threads: " << countThreads << "\n";
+        size_t threadSize = vector.size() / countThreads;
+        std::vector<std::thread> threads;
+        for (size_t i = 0; i < countThreads; i++) 
+        {
+            size_t start = i * threadSize;
+            size_t end = (i != countThreads - 1 ? start + threadSize : vector.size());
+            threads.emplace_back(mergeSort_, std::ref(vector), start, end, std::ref(buffer));
+        }
+        for (auto &thread : threads) 
+        {
+            thread.join();
+        }
+
+        for (size_t i = 0; i < countThreads; i += 2) 
+        {
+            size_t start1 = i * threadSize;
+            size_t end1 = (i != countThreads - 1 ? start1 + threadSize : vector.size());
+            size_t start2 = (i + 1) * threadSize;
+            size_t end2 = (i + 1 != countThreads - 1 ? start2 + threadSize : vector.size());
+            merge(vector, start1, end1, vector, start2, end2, buffer, start1);
+            std::copy(buffer.begin() + start1, buffer.begin() + end2, vector.begin() + start1);
+        }
+        merge(vector, 0, 2 * threadSize, vector, 2 * threadSize, vector.size(), buffer, 0);
+        std::copy(buffer.begin(), buffer.begin() + vector.size(), vector.begin());
+    }
+    auto timeEnd = std::chrono::steady_clock::now();
+    std::cout << "Time sort: " << std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count() << " ms\n\n";
+
     buffer.clear();
 }
 
@@ -122,11 +197,13 @@ void mergeFiles(std::ifstream& input1, std::ifstream& input2, std::ofstream &out
 
     while (!input1.eof() || !input2.eof()) {
         if (input2.eof() || !input1.eof() &&
-            word1 < word2) {
+            word1 < word2) 
+        {
             out << word1 << '\n';
             std::getline(input1, word1);
         }
-        else {
+        else 
+        {
             out << word2 << '\n';
             std::getline(input2, word2);
         }
@@ -177,8 +254,15 @@ int main()
                 if (tempFile.is_open()) 
                 {
                     mergeSort(tmp);
+                    if (!isOrdered(tmp)) 
+                    {
+                        std::cerr << "Sort is not correct\n";
+                        tempFile.close();
+                        tmp.clear();
+                        throw std::exception();
+                    }
                     writeFile(tmp, tempFile);
-                    printMemorySize();
+                    //printMemorySize();
                     tempFile.close();
                     tmp.clear();
                 }
@@ -198,6 +282,13 @@ int main()
         {
             mergeSort(tmp);
             writeFile(tmp, tempFile);
+            if (!isOrdered(tmp))
+            {
+                std::cerr << "Sort is not correct\n";
+                tempFile.close();
+                tmp.clear();
+                throw std::exception();
+            }
             tempFile.close();
             tmp.clear();
         }
@@ -206,6 +297,7 @@ int main()
         inputFile.close();
         while (namesTmpFiles.size() > 2) 
         {
+            auto timeStart = std::chrono::steady_clock::now();
             std::string fileName1 = namesTmpFiles.front();
             namesTmpFiles.pop();
             std::string fileName2 = namesTmpFiles.front();
@@ -227,16 +319,18 @@ int main()
                 remove(fileName2.c_str());
                 namesTmpFiles.push(fileName3);
             }
+            auto timeEnd = std::chrono::steady_clock::now();
+            std::cout << "Time merge two files: " << std::chrono::duration_cast<std::chrono::seconds>(timeEnd - timeStart).count() << " s\n\n";
         }
-
+        auto timeStart = std::chrono::steady_clock::now();
         std::string fileName1 = namesTmpFiles.front();
         namesTmpFiles.pop();
         std::string fileName2 = namesTmpFiles.front();
         namesTmpFiles.pop();
-
+        
         std::ifstream file1(fileName1);
         std::ifstream file2(fileName2);
-
+        
         if (file1.is_open() && file2.is_open())
         {
             mergeFiles(file1, file2, outFile);
@@ -246,10 +340,12 @@ int main()
             remove(fileName2.c_str());
         }
         outFile.close();
+        auto timeEnd = std::chrono::steady_clock::now();
+        std::cout << "Time merge two files: " << std::chrono::duration_cast<std::chrono::seconds>(timeEnd - timeStart).count() << " s\n\n";
     }
     else 
     {
-        generate_file(10000, 2000);
+        generate_file(120, 10);
     }
 
     return 0;
