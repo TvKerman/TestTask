@@ -1,19 +1,24 @@
 ﻿#include <iostream>
 #include <fstream>
+
 #include <string>
 #include <vector>
 #include <queue>
-#include <cstdio>
+
 #include <windows.h>
 #include <psapi.h>
+
 #include <chrono>
 #include <thread>
+#include <mutex>
 
 #define MAX_VECTOR_BUFFER_SIZE 1000000
 #define MAX_PERCENTAGE_OF_FREE_RAM_USAGE 1.0
 #define MAX_NON_PARALLEL_VECTOR_SIZE 1000
 #define WIDTH 7
 #define DIV 1024
+
+std::mutex globalLock;
 
 void generate_file(int countRows, int lenWord) 
 {
@@ -49,29 +54,6 @@ void merge(const std::vector<std::string>& source1,
             readIndex2++;
         }
         writeIndex++;
-    }
-}
-
-void merge(const std::vector<std::string>::iterator &begin1,
-           const std::vector<std::string>::iterator &end1,
-           const std::vector<std::string>::iterator &begin2,
-           const std::vector<std::string>::iterator &end2,
-           const std::vector<std::string>::iterator &destination) 
-{
-    std::vector<std::string>::iterator read1 = begin1;
-    std::vector<std::string>::iterator read2 = begin2;
-    std::vector<std::string>::iterator write = destination;
-    while (read1 < end1 || read2 < end2) {
-        if (read2 == end2 || read1 < end1 && 
-                    read1 < read2) {
-            (*write) = (*read1);
-            read1++;
-        }
-        else {
-            (*write) = (*read2);
-            read2++;
-        }
-        write++;
     }
 }
 
@@ -218,9 +200,16 @@ void writeFile(const std::vector<std::string>& vector, std::ofstream& file)
     }
 }
 
+
+std::string createTempFileName(size_t index)
+{
+    return "tmp" + std::to_string(index) + ".txt";
+}
+
+
 void openNewTempFile(std::ofstream &tempFile, size_t &indexFile,std::queue<std::string> &queueTempFiles) 
 {
-    std::string fileName = "tmp" + std::to_string(indexFile) + ".txt";
+    std::string fileName = createTempFileName(indexFile);
     tempFile.open(fileName, 'w');
     if (tempFile.is_open())
     {
@@ -233,28 +222,56 @@ void openNewTempFile(std::ofstream &tempFile, size_t &indexFile,std::queue<std::
     }
 }
 
+void mergeTempFiles(const std::string inputFileName1, 
+                    const std::string inputFileName2,
+                    const std::string outputFileName,
+                    std::queue<std::string> &mergeQueue) 
+{
+    std::ifstream inputFile1(inputFileName1);
+    std::ifstream inputFile2(inputFileName2);
+    std::ofstream mergeFile(outputFileName);
+
+    if (inputFile1.is_open() && inputFile2.is_open() && mergeFile.is_open())
+    {
+        mergeFiles(inputFile1, inputFile2, mergeFile);
+        inputFile1.close();
+        inputFile2.close();
+        mergeFile.close();
+        remove(inputFileName1.c_str());
+        remove(inputFileName2.c_str());
+
+        globalLock.lock();
+        mergeQueue.push(outputFileName);
+        globalLock.unlock();
+    } 
+    else
+    {
+        std::cerr << "Failed to open files\n";
+        throw std::exception();
+    }
+}
+
 int main()
 {
     std::ifstream inputFile("input.txt");
-    std::ofstream outFile("output.txt");
 
-    std::vector<std::string> tmp; 
+    std::vector<std::string> tmp;
     std::queue<std::string> namesTmpFiles;
     size_t indexFile = 1;
 
-    if (inputFile.is_open() && outFile.is_open()) 
+    if (inputFile.is_open())
     {
         std::string word;
         std::ofstream tempFile;
-        while (std::getline(inputFile, word)) 
+        while (std::getline(inputFile, word))
         {
-            if (!isCanAddWord(tmp) ) 
+            if (!isCanAddWord(tmp))
             {
                 openNewTempFile(tempFile, indexFile, namesTmpFiles);
-                if (tempFile.is_open()) 
+                if (tempFile.is_open())
                 {
                     mergeSort(tmp);
-                    if (!isOrdered(tmp)) 
+                    if (!isOrdered(tmp))
                     {
                         std::cerr << "Sort is not correct\n";
                         tempFile.close();
@@ -266,7 +283,7 @@ int main()
                     tempFile.close();
                     tmp.clear();
                 }
-                else 
+                else
                 {
                     std::cerr << "Not open temp file!!!";
                     throw std::exception();
@@ -292,61 +309,83 @@ int main()
             tempFile.close();
             tmp.clear();
         }
-
-
         inputFile.close();
-        while (namesTmpFiles.size() > 2) 
+    }
+
+    //while (namesTmpFiles.size() > 2) 
+    //{
+    //    auto timeStart = std::chrono::steady_clock::now();
+    //
+    //    std::string fileName1 = namesTmpFiles.front();
+    //    namesTmpFiles.pop();
+    //    std::string fileName2 = namesTmpFiles.front();
+    //    namesTmpFiles.pop();
+    //
+    //    mergeTempFiles(fileName1, fileName2, createTempFileName(indexFile), namesTmpFiles);
+    //    indexFile++;
+    //
+    //    auto timeEnd = std::chrono::steady_clock::now();
+    //    std::cout << "Time merge two files: " << std::chrono::duration_cast<std::chrono::seconds>(timeEnd - timeStart).count() << " s\n\n";
+    //}
+    //
+    //auto timeStart = std::chrono::steady_clock::now();
+    //
+    //std::string fileName1 = namesTmpFiles.front();
+    //namesTmpFiles.pop();
+    //std::string fileName2 = namesTmpFiles.front();
+    //namesTmpFiles.pop();
+    //
+    //mergeTempFiles(fileName1, fileName2, "output.txt", namesTmpFiles);
+    //
+    //auto timeEnd = std::chrono::steady_clock::now();
+    //std::cout << "Time merge two files: " << std::chrono::duration_cast<std::chrono::seconds>(timeEnd - timeStart).count() << " s\n\n";
+    auto timeStart = std::chrono::steady_clock::now();
+    while (namesTmpFiles.size() > 2)
+    {
+        std::vector<std::thread> threads;
+        size_t countThreads = (std::thread::hardware_concurrency() >= 4 ? 4: std::thread::hardware_concurrency());
+        if (countThreads == 0) 
         {
-            auto timeStart = std::chrono::steady_clock::now();
             std::string fileName1 = namesTmpFiles.front();
             namesTmpFiles.pop();
             std::string fileName2 = namesTmpFiles.front();
             namesTmpFiles.pop();
             
-            std::ifstream file1(fileName1);
-            std::ifstream file2(fileName2);
-            std::string fileName3 = "tmp" + std::to_string(indexFile) + ".txt";
+            mergeTempFiles(fileName1, fileName2, createTempFileName(indexFile), std::ref(namesTmpFiles));
             indexFile++;
-            std::ofstream mergeFile(fileName3);
-            
-            if (file1.is_open() && file2.is_open() && mergeFile.is_open()) 
+        } 
+        else 
+        {
+            for (size_t i = 0; i < countThreads && namesTmpFiles.size() > 1; i++)
             {
-                mergeFiles(file1, file2, mergeFile);
-                file1.close();
-                file2.close();
-                mergeFile.close();
-                remove(fileName1.c_str());
-                remove(fileName2.c_str());
-                namesTmpFiles.push(fileName3);
+                std::string fileName1 = namesTmpFiles.front();
+                namesTmpFiles.pop();
+                std::string fileName2 = namesTmpFiles.front();
+                namesTmpFiles.pop();
+
+                threads.emplace_back(mergeTempFiles, fileName1, fileName2, createTempFileName(indexFile), std::ref(namesTmpFiles));
+                indexFile++;
             }
-            auto timeEnd = std::chrono::steady_clock::now();
-            std::cout << "Time merge two files: " << std::chrono::duration_cast<std::chrono::seconds>(timeEnd - timeStart).count() << " s\n\n";
+            for (auto& thread : threads)
+            {
+                thread.join();
+            }
         }
-        auto timeStart = std::chrono::steady_clock::now();
+    }
+    if (namesTmpFiles.size() == 2)
+    {
         std::string fileName1 = namesTmpFiles.front();
         namesTmpFiles.pop();
         std::string fileName2 = namesTmpFiles.front();
         namesTmpFiles.pop();
-        
-        std::ifstream file1(fileName1);
-        std::ifstream file2(fileName2);
-        
-        if (file1.is_open() && file2.is_open())
-        {
-            mergeFiles(file1, file2, outFile);
-            file1.close();
-            file2.close();
-            remove(fileName1.c_str());
-            remove(fileName2.c_str());
-        }
-        outFile.close();
-        auto timeEnd = std::chrono::steady_clock::now();
-        std::cout << "Time merge two files: " << std::chrono::duration_cast<std::chrono::seconds>(timeEnd - timeStart).count() << " s\n\n";
+
+        mergeTempFiles(fileName1, fileName2, "output.txt", std::ref(namesTmpFiles));
     }
     else 
     {
-        generate_file(120, 10);
+        std::rename(createTempFileName(indexFile - 1).c_str(), "output.txt");
     }
-
+    auto timeEnd = std::chrono::steady_clock::now();
+    std::cout << "Time merge all temp files: " << std::chrono::duration_cast<std::chrono::seconds>(timeEnd - timeStart).count() << " s\n\n";
     return 0;
 }
