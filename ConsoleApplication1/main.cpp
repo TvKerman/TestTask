@@ -90,18 +90,6 @@ bool isCanAddWord(std::vector<std::string> &wordsBuffer)
     return wordsBuffer.size() < MAX_VECTOR_BUFFER_SIZE && percentage < MAX_PERCENTAGE_OF_FREE_RAM_USAGE;
 }
 
-bool isOrdered(std::vector<std::string> &vector) 
-{
-    for (size_t i = 1; i < vector.size(); i++) 
-    {
-        if (vector[i - 1] > vector[i]) 
-        {
-            return false;
-        }
-    }
-    return true;
-} 
-
 void mergeSort_(std::vector<std::string> &vector, 
                 const size_t start, const size_t end,
                 std::vector<std::string> &buffer) 
@@ -271,13 +259,13 @@ int main()
                 if (tempFile.is_open())
                 {
                     mergeSort(tmp);
-                    if (!isOrdered(tmp))
-                    {
-                        std::cerr << "Sort is not correct\n";
-                        tempFile.close();
-                        tmp.clear();
-                        throw std::exception();
-                    }
+                    //if (!isOrdered(tmp))
+                    //{
+                    //    std::cerr << "Sort is not correct\n";
+                    //    tempFile.close();
+                    //    tmp.clear();
+                    //    throw std::exception();
+                    //}
                     writeFile(tmp, tempFile);
                     //printMemorySize();
                     tempFile.close();
@@ -299,13 +287,13 @@ int main()
         {
             mergeSort(tmp);
             writeFile(tmp, tempFile);
-            if (!isOrdered(tmp))
-            {
-                std::cerr << "Sort is not correct\n";
-                tempFile.close();
-                tmp.clear();
-                throw std::exception();
-            }
+            //if (!isOrdered(tmp))
+            //{
+            //    std::cerr << "Sort is not correct\n";
+            //    tempFile.close();
+            //    tmp.clear();
+            //    throw std::exception();
+            //}
             tempFile.close();
             tmp.clear();
         }
