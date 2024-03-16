@@ -128,7 +128,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="lib\FileManagementModule\FileManagement.cpp" />
+    <ClCompile Include="lib\Sorting\Sorting.cpp" />
     <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="lib\FileManagementModule\FIleManagement.h" />
+    <ClInclude Include="lib\Sorting\Sorting.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
