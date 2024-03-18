@@ -10,8 +10,6 @@
 #include <thread>
 #include <mutex>
 
-std::mutex globalLock;
-
 // Создает файл с именем input.txt, с количеством строк countRows и 
 // lenWord количесвом символов в одной строке. Файл содержит слова.
 // Слово состоит из повторяющейся буквы латинского алфавита.
@@ -42,10 +40,25 @@ void openNewTempFile(std::ofstream& tempFile,
 
 // Открывает файлы с именами inputFileName1, inputFileName2, outputFileName.
 // Выполняет слияние файлов с именами inputFileName1 и inputFileName2 в файл с именем outputFileName.
-// Добавляет имя outputFileName в очередь mergeQueue. Закрывает все открытые файлы.
+// Добавляет имя outputFileName в очередь mergeQueue. 
+// Закрывает все открытые файлы.
 // Удаляет файлы с именами inputFileName1 и inputFileName2.
 // В случае если не удалось открыть один из файлов, генерирует искючение.
 void mergeTempFiles(const std::string inputFileName1,
+                            const std::string inputFileName2,
+                            const std::string outputFileName,
+                            std::queue<std::string>& mergeQueue);
+
+
+// Открывает файлы с именами inputFileName1, inputFileName2, outputFileName.
+// Выполняет слияние файлов с именами inputFileName1 и inputFileName2 в файл с именем outputFileName.
+// Добавляет имя outputFileName в очередь mergeQueue. 
+// lock - необходим для предотвращении ошибок при добавлении имён в очередь во время одновременного обращения.
+// Закрывает все открытые файлы.
+// Удаляет файлы с именами inputFileName1 и inputFileName2.
+// В случае если не удалось открыть один из файлов, генерирует искючение.
+void mergeTempFilesThreadFunction(const std::string inputFileName1,
                         const std::string inputFileName2,
                         const std::string outputFileName,
-                        std::queue<std::string>& mergeQueue);
+                        std::queue<std::string>& mergeQueue,
+                        std::mutex &lock);

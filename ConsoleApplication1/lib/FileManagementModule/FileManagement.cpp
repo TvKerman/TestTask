@@ -44,7 +44,7 @@ void writeFile(const std::vector<std::string>& vector, std::ofstream& file)
 
 std::string createTempFileName(size_t index)
 {
-    return "tmp" + std::to_string(index) + ".txt";
+    return "Temp/tmp" + std::to_string(index) + ".txt";
 }
 
 void openNewTempFile(std::ofstream& tempFile, size_t& indexFile, 
@@ -80,10 +80,36 @@ void mergeTempFiles(const std::string inputFileName1,
         mergeFile.close();
         remove(inputFileName1.c_str());
         remove(inputFileName2.c_str());
-
-        globalLock.lock();
         mergeQueue.push(outputFileName);
-        globalLock.unlock();
+    }
+    else
+    {
+        throw std::exception();
+    }
+}
+
+void mergeTempFilesThreadFunction(const std::string inputFileName1,
+                        const std::string inputFileName2,
+                        const std::string outputFileName,
+                        std::queue<std::string>& mergeQueue,
+                        std::mutex &lock)
+{
+    std::ifstream inputFile1(inputFileName1);
+    std::ifstream inputFile2(inputFileName2);
+    std::ofstream mergeFile(outputFileName);
+
+    if (inputFile1.is_open() && inputFile2.is_open() && mergeFile.is_open())
+    {
+        mergeFiles(inputFile1, inputFile2, mergeFile);
+        inputFile1.close();
+        inputFile2.close();
+        mergeFile.close();
+        remove(inputFileName1.c_str());
+        remove(inputFileName2.c_str());
+
+        lock.lock();
+        mergeQueue.push(outputFileName);
+        lock.unlock();
     }
     else
     {
