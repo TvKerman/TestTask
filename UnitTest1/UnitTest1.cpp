@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "CppUnitTest.h"
-#include "../ConsoleApplication1/main.cpp"
+
+#include "../ConsoleApplication1/lib/FileManagementModule/FileManagement.cpp"
 
 #include <ctime>
 #include <random>
@@ -16,86 +17,8 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 #define START_CODE_SYMBOL 'a'
 #define END_CODE_SYMBOL 'z'
 
-namespace UnitTest1
+namespace FileManagementTests
 {
-	TEST_CLASS(MergeSortTests)
-	{
-	private:
-		std::string generateRandomWord(size_t startSize, size_t endSize) 
-		{
-			size_t wordSize = std::rand() % (endSize - startSize) + startSize;
-			std::string word = "";
-			for (size_t j = 0; j < wordSize; j++)
-			{
-				word += (char)(std::rand() % (END_CODE_SYMBOL - START_CODE_SYMBOL) + START_CODE_SYMBOL);
-			}
-
-			return word;
-		}
-
-		std::vector<std::string> generateRandomTestDataForMergeSort(size_t startSize, size_t endSize) 
-		{
-			size_t dataSize = std::rand() % (endSize - startSize) + startSize;
-			std::vector<std::string> testData(dataSize);
-			for (size_t i = 0; i < dataSize; i++)
-			{
-				testData[i] = generateRandomWord(START_WORD_SIZE, END_WORD_SIZE);
-			}
-
-			return testData;
-		}
-
-		std::vector<std::string> generateTestDataFromSingleWord() 
-		{
-			size_t dataSize = 1;
-			std::vector<std::string> testData(dataSize);
-			testData[0] = generateRandomWord(START_WORD_SIZE, END_WORD_SIZE);
-
-			return testData;
-		}
-
-		bool isOrdered(std::vector<std::string>& vector)
-		{
-			for (size_t i = 1; i < vector.size(); i++)
-			{
-				if (vector[i - 1] > vector[i])
-				{
-					return false;
-				}
-			}
-			return true;
-		}
-
-	public:
-		
-		TEST_METHOD(RandomDataSmallSize)
-		{
-			std::srand(time(0));
-			std::vector<std::string> testData = generateRandomTestDataForMergeSort(START_DATA_SIZE_1, END_DATA_SIZE_1);
-
-			mergeSort(testData);
-			Assert::IsTrue(isOrdered(testData));
-		}
-
-		TEST_METHOD(RandomDataBigSize)
-		{
-			std::srand(time(0));
-			std::vector<std::string> testData = generateRandomTestDataForMergeSort(START_DATA_SIZE_2, END_DATA_SIZE_2);
-
-			mergeSort(testData);
-			Assert::IsTrue(isOrdered(testData));
-		}
-
-		TEST_METHOD(SingleWordInData) 
-		{
-			std::srand(time(0));
-			std::vector<std::string> testData = generateTestDataFromSingleWord();
-
-			mergeSort(testData);
-			Assert::IsTrue(isOrdered(testData));
-		}
-	};
-
 	TEST_CLASS(MergeFilesTests)
 	{
 	private:
@@ -132,17 +55,18 @@ namespace UnitTest1
 			return testData;
 		}
 
-		bool isOrderedFile(std::ifstream &file)
+		bool isContentsFileEqualExpected(std::ifstream &file, 
+										 const std::vector<std::string> &expected)
 		{
-			std::string previousWord, currentWord;
-			std::getline(file, previousWord);
+			std::string currentWord;
+			size_t index = 0;
 			while (std::getline(file, currentWord)) 
 			{
-				if (previousWord > currentWord) 
+				if (index >= expected.size() || expected[index] != currentWord) 
 				{
 					return false;
 				}
-				previousWord = currentWord;
+				index++;
 			}
 			return true;
 		}
@@ -159,7 +83,8 @@ namespace UnitTest1
 		}
 
 		bool test(const std::vector<std::string>& data1, 
-				  const std::vector<std::string>& data2) 
+				  const std::vector<std::string>& data2,
+				  const std::vector<std::string>& expected) 
 		{
 			generateTestDataFile("testData1.txt", data1);
 			generateTestDataFile("testData2.txt", data2);
@@ -185,7 +110,7 @@ namespace UnitTest1
 			{
 				throw std::exception();
 			}
-			bool testResult = isOrderedFile(result);
+			bool testResult = isContentsFileEqualExpected(result, expected);
 			result.close();
 			remove("mergeResult.txt");
 
@@ -197,34 +122,74 @@ namespace UnitTest1
 		TEST_METHOD(RandomDataSmallSize)
 		{
 			std::srand(time(0));
-			std::vector<std::string> testData1 = generateRandomTestDataForMergeSort(START_DATA_SIZE_1, END_DATA_SIZE_1);
-			std::vector<std::string> testData2 = generateRandomTestDataForMergeSort(START_DATA_SIZE_1, END_DATA_SIZE_1);
-			mergeSort(testData1);
-			mergeSort(testData2);
+			std::vector<std::string> expected = generateRandomTestDataForMergeSort(START_DATA_SIZE_1, END_DATA_SIZE_1);
+			std::vector<std::string> testData1, testData2;
+			for (auto element: expected) 
+			{
+				if (std::rand() % 2) 
+				{
+					testData1.push_back(element);
+				}
+				else 
+				{
+					testData2.push_back(element);
+				}
+			}
+			std::sort(expected.begin(), expected.end());
+			std::sort(testData1.begin(), testData1.end());
+			std::sort(testData2.begin(), testData2.end());
 
-			Assert::IsTrue(test(testData1, testData2));
+			Assert::IsTrue(test(testData1, testData2, expected));
 		}
 
 		TEST_METHOD(RandomDataBigSize)
 		{
 			std::srand(time(0));
-			std::vector<std::string> testData1 = generateRandomTestDataForMergeSort(START_DATA_SIZE_2, END_DATA_SIZE_2);
-			std::vector<std::string> testData2 = generateRandomTestDataForMergeSort(START_DATA_SIZE_2, END_DATA_SIZE_2);
-			mergeSort(testData1);
-			mergeSort(testData2);
+			std::vector<std::string> expected = generateRandomTestDataForMergeSort(START_DATA_SIZE_2, END_DATA_SIZE_2);
+			std::vector<std::string> testData1, testData2;
+			for (auto element : expected)
+			{
+				if (std::rand() % 2)
+				{
+					testData1.push_back(element);
+				}
+				else
+				{
+					testData2.push_back(element);
+				}
+			}
+			std::sort(expected.begin(), expected.end());
+			std::sort(testData1.begin(), testData1.end());
+			std::sort(testData2.begin(), testData2.end());
 
-			Assert::IsTrue(test(testData1, testData2));
+			Assert::IsTrue(test(testData1, testData2, expected));
 		}
 
 		TEST_METHOD(SingleWordInData)
 		{
 			std::srand(time(0));
-			std::vector<std::string> testData1 = generateTestDataFromSingleWord();
-			std::vector<std::string> testData2 = generateTestDataFromSingleWord();
-			mergeSort(testData1);
-			mergeSort(testData2);
+			std::vector<std::string> expected(2);
+			for (size_t i = 0; i < expected.size(); i++) 
+			{
+				expected[i] = generateRandomWord(START_WORD_SIZE, END_WORD_SIZE);
+			}
+			std::vector<std::string> testData1, testData2;
+			for (auto element : expected)
+			{
+				if (std::rand() % 2)
+				{
+					testData1.push_back(element);
+				}
+				else
+				{
+					testData2.push_back(element);
+				}
+			}
+			std::sort(expected.begin(), expected.end());
+			std::sort(testData1.begin(), testData1.end());
+			std::sort(testData2.begin(), testData2.end());
 
-			Assert::IsTrue(test(testData1, testData2));
+			Assert::IsTrue(test(testData1, testData2, expected));
 		}
 	};
 }

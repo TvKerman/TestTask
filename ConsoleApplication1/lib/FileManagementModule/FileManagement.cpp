@@ -1,4 +1,31 @@
-#include "FIleManagement.h"
+#include "FileManagement.h"
+
+std::ifstream getStreamToRead(const std::string& streamName)
+{
+    std::ifstream stream(streamName);
+    if (!stream.is_open())
+    {
+        throw std::exception("ERROR! The file could not be opened for reading\n");
+    }
+
+    return stream;
+}
+
+std::ofstream getStreamToWrite(const std::string& streamName) 
+{
+    std::ofstream stream(streamName);
+    if (!stream.is_open())
+    {
+        throw std::exception("ERROR! The file could not be opened for writing\n");
+    }
+
+    return stream;
+}
+
+void createTempFolder() 
+{
+    std::filesystem::create_directory("Temp");
+}
 
 void generateFile(int countRows, int lenWord)
 {
@@ -47,20 +74,26 @@ std::string createTempFileName(size_t index)
     return "Temp/tmp" + std::to_string(index) + ".txt";
 }
 
+void removeAllTempFiles() 
+{
+    std::filesystem::remove_all("Temp");
+}
+
 void openNewTempFile(std::ofstream& tempFile, size_t& indexFile, 
                                     std::queue<std::string>& queueTempFiles)
 {
     std::string fileName = createTempFileName(indexFile);
-    tempFile.open(fileName, 'w');
-    if (tempFile.is_open())
+    try
     {
-        queueTempFiles.push(fileName);
-        indexFile++;
+        tempFile = getStreamToWrite(fileName);
     }
-    else
+    catch (const std::exception& error)
     {
-        throw std::exception();
+        throw error;
     }
+    
+    queueTempFiles.push(fileName);
+    indexFile++;
 }
 
 void mergeTempFiles(const std::string inputFileName1,
@@ -68,51 +101,67 @@ void mergeTempFiles(const std::string inputFileName1,
                         const std::string outputFileName,
                         std::queue<std::string>& mergeQueue)
 {
-    std::ifstream inputFile1(inputFileName1);
-    std::ifstream inputFile2(inputFileName2);
-    std::ofstream mergeFile(outputFileName);
-
-    if (inputFile1.is_open() && inputFile2.is_open() && mergeFile.is_open())
+    std::ifstream inputFile1, inputFile2;
+    std::ofstream mergeFile;
+    try
     {
-        mergeFiles(inputFile1, inputFile2, mergeFile);
+        inputFile1 = getStreamToRead(inputFileName1);
+        inputFile2 = getStreamToRead(inputFileName2);
+        mergeFile = getStreamToWrite(outputFileName);
+    }
+    catch (const std::exception& error)
+    {
         inputFile1.close();
         inputFile2.close();
         mergeFile.close();
-        remove(inputFileName1.c_str());
-        remove(inputFileName2.c_str());
-        mergeQueue.push(outputFileName);
+
+        throw error;
     }
-    else
-    {
-        throw std::exception();
-    }
+
+    mergeFiles(inputFile1, inputFile2, mergeFile);
+    inputFile1.close();
+    inputFile2.close();
+    mergeFile.close();
+    remove(inputFileName1.c_str());
+    remove(inputFileName2.c_str());
+
+    mergeQueue.push(outputFileName);
 }
 
 void mergeTempFilesThreadFunction(const std::string inputFileName1,
                         const std::string inputFileName2,
                         const std::string outputFileName,
                         std::queue<std::string>& mergeQueue,
-                        std::mutex &lock)
+                        std::mutex &lock, 
+                        std::string &errorMessage)
 {
-    std::ifstream inputFile1(inputFileName1);
-    std::ifstream inputFile2(inputFileName2);
-    std::ofstream mergeFile(outputFileName);
-
-    if (inputFile1.is_open() && inputFile2.is_open() && mergeFile.is_open())
+    std::ifstream inputFile1,inputFile2;
+    std::ofstream mergeFile;
+    try
     {
-        mergeFiles(inputFile1, inputFile2, mergeFile);
+        inputFile1 = getStreamToRead(inputFileName1);
+        inputFile2 = getStreamToRead(inputFileName2);
+        mergeFile = getStreamToWrite(outputFileName);
+    }
+    catch (const std::exception& error)
+    {
         inputFile1.close();
         inputFile2.close();
         mergeFile.close();
-        remove(inputFileName1.c_str());
-        remove(inputFileName2.c_str());
 
-        lock.lock();
-        mergeQueue.push(outputFileName);
-        lock.unlock();
+        errorMessage = error.what();
+        return;
     }
-    else
-    {
-        throw std::exception();
-    }
+
+
+    mergeFiles(inputFile1, inputFile2, mergeFile);
+    inputFile1.close();
+    inputFile2.close();
+    mergeFile.close();
+    remove(inputFileName1.c_str());
+    remove(inputFileName2.c_str());
+
+    lock.lock();
+    mergeQueue.push(outputFileName);
+    lock.unlock();
 }
