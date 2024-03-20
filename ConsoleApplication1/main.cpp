@@ -59,10 +59,14 @@ void creatingNewTempFileBasedOnBuffer(std::vector<std::string>& buffer,
 
 int main(int argc, char* argv[])
 {
-    std::string filePath(argv[1]);
-
     try
     {
+        if (argc != 2) 
+        {
+            throw std::exception("The command line arguments do not match the expected ones");
+        }
+        std::string filePath(argv[1]);
+
         std::ifstream inputFile = getStreamToRead(filePath);
         createTempFolder();
 
@@ -108,11 +112,11 @@ int main(int argc, char* argv[])
                     fileMergeQueue.pop();
 
                     threads.emplace_back(mergeTempFilesThreadFunction,
-                                        fileName1, fileName2,
-                                        createTempFileName(indexFile),
-                                        std::ref(fileMergeQueue),
-                                        std::ref(lock),
-                                        std::ref(errorMessage));
+                                                fileName1, fileName2,
+                                                createTempFileName(indexFile),
+                                                std::ref(fileMergeQueue),
+                                                std::ref(lock),
+                                                std::ref(errorMessage));
                     indexFile++;
                 }
                 for (auto& thread : threads)
@@ -131,9 +135,9 @@ int main(int argc, char* argv[])
                 std::string fileName2 = fileMergeQueue.front();
                 fileMergeQueue.pop();
 
-                mergeTempFiles(fileName1, fileName2,
-                                        createTempFileName(indexFile),
-                                        fileMergeQueue);
+                std::string mergeFileName = createTempFileName(indexFile);
+                mergeTempFiles(fileName1, fileName2, mergeFileName);
+                fileMergeQueue.push(mergeFileName);
                 indexFile++;
             }
         }
@@ -146,7 +150,7 @@ int main(int argc, char* argv[])
             std::string fileName2 = fileMergeQueue.front();
             fileMergeQueue.pop();
 
-            mergeTempFiles(fileName1, fileName2, "output.txt", std::ref(fileMergeQueue));
+            mergeTempFiles(fileName1, fileName2, "output.txt");
         }
         else
         {
@@ -155,12 +159,14 @@ int main(int argc, char* argv[])
             std::rename(fileName.c_str(), "output.txt");
         }
         std::cout << "The sorting of the source file is finished\n";
+        std::cout << "The result of the sorting was written to a file 'output.txt 'in the program folder.\n";
     }
     catch (const std::exception& error)
     {
         removeAllTempFiles();
         std::cerr << error.what(); 
+        std::cerr << "The file was not sorted!!!\n";
     }
-    
+    system("pause");
     return 0;
 }

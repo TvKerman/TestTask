@@ -29,17 +29,18 @@ void mergeSort_(std::vector<std::string>& vector,
                     std::vector<std::string>& buffer)
 {
     size_t size = end - start;
-    if (size <= 1)
-        return;
+    for (size_t subvectorSize = 1; subvectorSize <= size; subvectorSize *= 2)
+    {
+        for (size_t i = start; i + subvectorSize < end; i += 2 * subvectorSize)
+        {
+            size_t from = i;
+            size_t middle = i + subvectorSize;
+            size_t to = std::min(i + 2 * subvectorSize, end);
 
-    size_t middle = (start + end) / 2;
-
-    mergeSort_(vector, start, middle, buffer);
-    mergeSort_(vector, middle, end, buffer);
-
-    merge(vector, start, middle, vector, middle, end, buffer, start);
-
-    std::copy(buffer.begin() + start, buffer.begin() + end, vector.begin() + start);
+            merge(vector, from, middle, vector, middle, to, buffer, from);
+        }
+        std::copy(buffer.begin() + start, buffer.begin() + end, vector.begin() + start);
+    }
 }
 
 void mergeSort(std::vector<std::string>& vector)
@@ -48,11 +49,7 @@ void mergeSort(std::vector<std::string>& vector)
     size_t countThreads = (std::thread::hardware_concurrency() >= MAX_COUNT_OF_THREADS_USED ? 
                                                                   MAX_COUNT_OF_THREADS_USED : 
                                                                                           0);
-    if (countThreads == 0 || vector.size() < MAX_NON_PARALLEL_VECTOR_SIZE)
-    {
-        mergeSort_(vector, 0, vector.size(), buffer);
-    }
-    else
+    if (countThreads != 0 && vector.size() > MAX_NON_PARALLEL_VECTOR_SIZE)
     {
         size_t threadSize = vector.size() / countThreads;
         std::vector<std::thread> threads;
@@ -67,18 +64,22 @@ void mergeSort(std::vector<std::string>& vector)
             thread.join();
         }
 
-        // Надо переписать
-        for (size_t i = 0; i < countThreads; i += 2)
+        for (size_t subvectorSize = threadSize; subvectorSize < vector.size() / 2 + 1; subvectorSize *= 2, countThreads /= 2) 
         {
-            size_t start1 = i * threadSize;
-            size_t end1 = (i != countThreads - 1 ? start1 + threadSize : vector.size());
-            size_t start2 = (i + 1) * threadSize;
-            size_t end2 = (i + 1 != countThreads - 1 ? start2 + threadSize : vector.size());
-            merge(vector, start1, end1, vector, start2, end2, buffer, start1);
-            std::copy(buffer.begin() + start1, buffer.begin() + end2, vector.begin() + start1);
+            for (size_t i = 0; i < countThreads; i += 2)
+            {
+                size_t start1 = i * subvectorSize;
+                size_t end1 = (i != countThreads - 1 ? start1 + subvectorSize : vector.size());
+                size_t start2 = (i + 1) * subvectorSize;
+                size_t end2 = (i + 1 != countThreads - 1 ? start2 + subvectorSize : vector.size());
+                merge(vector, start1, end1, vector, start2, end2, buffer, start1);
+                std::copy(buffer.begin() + start1, buffer.begin() + end2, vector.begin() + start1);
+            }
         }
-        merge(vector, 0, 2 * threadSize, vector, 2 * threadSize, vector.size(), buffer, 0);
-        std::copy(buffer.begin(), buffer.begin() + vector.size(), vector.begin());
+    }
+    else
+    {
+        mergeSort_(vector, 0, vector.size(), buffer);
     }
 
     buffer.clear();

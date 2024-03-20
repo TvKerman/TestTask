@@ -7,7 +7,7 @@
 #include <thread>
 #include <mutex>
 
-#define MAX_NON_PARALLEL_VECTOR_SIZE 1000
+#define MAX_NON_PARALLEL_VECTOR_SIZE 10000
 #define MAX_COUNT_OF_THREADS_USED 4
 
 // Объединяет два отсортированных вектора source1 и source2 в один destination.
@@ -24,10 +24,18 @@ void merge(const std::vector<std::string>& source1,
                     std::vector<std::string>& destination,
                     const size_t startWrite);
 
-// Рекурсивная часть сортировки слиянием
+// Сортирует вектор vector от элемента под индексом start до end не включительно.
+// Использует итеративную реализацию сортировки слиянием.
+// Используемая буфером buffer память должна быть выделена заранее.
+// Размер памяти должен быть не меньше чем end элементов.
 void mergeSort_(std::vector<std::string>& vector,
                     const size_t start, const size_t end,
                     std::vector<std::string>& buffer);
 
-// Сортировка слиянием вектора vector
+// Сортировка слиянием вектора vector.
+// Если количество элементов в векторе превышает чем MAX_NON_PARALLEL_VECTOR_SIZE,
+// функция пробует разбить вектор на несколько частей и использовать отдельные потоки.
+// Если возможно использование MAX_COUNT_OF_THREADS_USED потоков, то вектор будет 
+// разбит на части размером vector.size() / MAX_NON_PARALLEL_VECTOR_SIZE.
+// Иначе потоки использованы не будут.
 void mergeSort(std::vector<std::string>& vector);

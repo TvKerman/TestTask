@@ -97,9 +97,8 @@ void openNewTempFile(std::ofstream& tempFile, size_t& indexFile,
 }
 
 void mergeTempFiles(const std::string inputFileName1,
-                        const std::string inputFileName2,
-                        const std::string outputFileName,
-                        std::queue<std::string>& mergeQueue)
+                    const std::string inputFileName2,
+                    const std::string outputFileName)
 {
     std::ifstream inputFile1, inputFile2;
     std::ofstream mergeFile;
@@ -124,42 +123,24 @@ void mergeTempFiles(const std::string inputFileName1,
     mergeFile.close();
     remove(inputFileName1.c_str());
     remove(inputFileName2.c_str());
-
-    mergeQueue.push(outputFileName);
 }
 
 void mergeTempFilesThreadFunction(const std::string inputFileName1,
-                        const std::string inputFileName2,
-                        const std::string outputFileName,
-                        std::queue<std::string>& mergeQueue,
-                        std::mutex &lock, 
-                        std::string &errorMessage)
+                                    const std::string inputFileName2,
+                                    const std::string outputFileName,
+                                    std::queue<std::string> &mergeQueue,
+                                    std::mutex &lock, 
+                                    std::string &errorMessage)
 {
-    std::ifstream inputFile1,inputFile2;
-    std::ofstream mergeFile;
     try
     {
-        inputFile1 = getStreamToRead(inputFileName1);
-        inputFile2 = getStreamToRead(inputFileName2);
-        mergeFile = getStreamToWrite(outputFileName);
+        mergeTempFiles(inputFileName1, inputFileName2, outputFileName);
     }
     catch (const std::exception& error)
     {
-        inputFile1.close();
-        inputFile2.close();
-        mergeFile.close();
-
         errorMessage = error.what();
         return;
     }
-
-
-    mergeFiles(inputFile1, inputFile2, mergeFile);
-    inputFile1.close();
-    inputFile2.close();
-    mergeFile.close();
-    remove(inputFileName1.c_str());
-    remove(inputFileName2.c_str());
 
     lock.lock();
     mergeQueue.push(outputFileName);
